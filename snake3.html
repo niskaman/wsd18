@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<!--
+    The Snake
+    Mikko Niskanen, 239927
+    mikko.niskanen@student.tut.fi
+    26.3.2018
+-->
+<html>
+    <head>
+        <title>The Snake</title>
+        <meta charset="utf-8" name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <style>
+            #gameDiv
+            {
+                padding: 0;
+                margin: auto;
+                display: block;
+            }
+            #gameCanvas
+            {
+                border: 1px solid #b3b3b3;
+                background-color: #f1f1f1;
+                padding: 0;
+                margin: auto;
+                display: block;
+            }
+            #controlsDiv
+            {
+                border: 1px solid #b3b3b3;
+                text-align: center;
+                padding: 0;
+                margin: auto;
+                display: block;
+            }
+        </style>
+    </head>
+    <body onload="newGame()">
+        <div id="gameDiv">
+            <canvas id="gameCanvas" tabindex=0></canvas>
+            <div id="controlsDiv">
+                    SCORE: 
+                    <b><output id="score"></output></b>
+                    <p>
+                        <input type="radio" id="easy" name="difficulty" value="200"> Easy [1]
+                        <input type="radio" id="normal" name="difficulty" value="100" checked> Normal [2]
+                        <input type="radio" id="hard" name="difficulty" value="50"> Hard [3]
+                        <input type="radio" id="caffeine" name="difficulty" value="25"> Caffeine [4]
+                    </p>
+                        <button onclick="newGame()">NEW [N]</button>
+                        <button onclick="loadGame()">LOAD [L]</button>
+                        <button onclick="saveGame()">SAVE [S]</button>
+                        <button onclick="pauseGame()">PAUSE [P]</button>
+                    <p>
+                        Use the arrow keys on you keyboard to start moving and to steer the snake. 
+                        It is also possible to use keyboard for other game options and buttons. 
+                        Increased difficulty produces more points for shorter snake.
+                        <!-- It is also possible 
+                        to use mouse clicks or touch screen. -->
+                    </p>
+            </div>
+        </div>
+
+<script>
+
+
+// The game instance
+var game = new Game();
+
+
+function newGame()
+{
+    // Initialize and start new game
+    game.init();
+    game.load();
+    game.start();
+}
+
+
+function stopGame()
+{
+    // Send SCORE
+    var msg = {
+        messageType: "SCORE",
+        score: game.score
+    };
+    window.parent.postMessage(msg, "*");
+    // Alert and stop
+    alert("GAME OVER!\nScore: " +game.score);
+    game.stop();
+}
+
+
+function saveGame()
+{
+    var msg = {
+        messageType: "SAVE",
+        gameState: {
+            gameSize: {
+                "width": game.WIDTH,
+                "height": game.HEIGHT
+            },
+            snake: {
+                "array": game.snake.snakeArr,
+                "direction": game.snake.direction
+            },
+            food: game.food.location,
+            difficulty: game.moveInterval
+        }
+    };
+    window.parent.postMessage(msg, "*");
+}
+
+
+function loadGame()
+{
+    var msg = {
+        messageType: "LOAD_REQUEST"
+    };
+    window.parent.postMessage(msg, "*");
+}
+
+
+function pauseGame()
+{
+    game.stop();
+}
+
+
+function receiveMessage(e)
+{
+    var msg = e.data;
+
+    if (msg.messageType === "LOAD")
+    {
+        game.stop();
+        game.load(msg.gameState.gameSize,
+                  msg.gameState.snake,
+                  msg.gameState.food,
+                  msg.gameState.difficulty)
+    }
+    else if (msg.messageType === "ERROR")
+    {
+        alert(msg.info);
+    }
+}
+
+
+// Updates game movoment, this case only snake
+function update()
+{
+    game.snake.move();
+}
+
+
+// GAME "class"
+function Game()
+{
+    this.canvas         = document.getElementById("gameCanvas");
+    this.ctx            = document.getElementById("gameCanvas").getContext("2d");
+    this.BLOCKSIZE      = 0;
+    this.WIDTH          = 0;
+    this.HEIGHT         = 0;
+
+    this.snake          = null;
+    this.food           = null;
+    this.score          = 0;
+    this.scoreIncrement = 0;
+    this.moveInterval   = 0;
+
+    this.gameRunning    = false;
+    this.playKeys       = [37,38,39,40];
+    this.controlKeys    = [80,78,76,83];
+    this.difficultyKeys = [49,97,50,98,51,99,52,100];
+
+
+    // INITIALIZE
+    this.init = function()
+    {
+        // Set game canvas size and calculate other dimensions
+        this.setSizes(480, 480);
+        this.setDifficulty();
+        // Init game variables
+        this.snake          = new Snake();
+        this.food           = new Food();
+        this.score          = 0;
+        this.scoreIncrement = 0;
+        // Event sniffers
+        window.addEventListener("message", receiveMessage, false);
+        window.addEventListener("keydown", (event) =>
+        {
+            event.preventDefault();
+            this.keyCode = event.keyCode;
+            catchKeyPress();
+        });
+    }
+
+    // LOAD
+    this.load = function(gameSize={width:this.WIDTH,height:this.HEIGHT}, 
+                         snake={array:this.snake.snakeArr,direction:this.snake.direction}, 
+                         foodLocation=this.food.location, 
+                         difficulty=this.moveInterval)
+    {
+        // Clear possible previous and set loaded size
+        this.clearCanvas();
+        this.setSizes(gameSize.width, gameSize.height);
+        // Load either saved or new games parameters
+        this.snake.snakeArr = snake.array;
+        this.snake.direction = snake.direction;
+        this.snake.nextLocation.x = this.snake.snakeArr[this.snake.snakeArr.length - 1].x
+        this.snake.nextLocation.y = this.snake.snakeArr[this.snake.snakeArr.length - 1].y
+        this.food.location = foodLocation;
+        this.moveInterval = difficulty;
+        this.score = this.snake.snakeArr.length - 1;
+        // Set radios and draw things
+        this.setRadioButtons();
+        this.snake.draw();
+        this.food.draw();
+        this.updateScore();
+        // Set game state
+        this.gameRunning = false;
+    }
+
+    // START
+    this.start = function()
+    {
+        // If already, clear and set new
+        if (this.interval)
+        {
+            clearInterval(this.interval);
+        }
+        this.interval = setInterval(update, this.moveInterval);
+        this.gameRunning = true;
+    }
+
+    // STOP
+    this.stop = function()
+    {
+        // If already, clear
+        if (this.interval)
+        {
+            clearInterval(this.interval);
+        }
+        this.gameRunning = false;
+    }
+    
+    // UPDATESCORE
+    this.updateScore = function()
+    {
+        document.getElementById("score").innerHTML = game.score;
+    }
+
+    // DRAWBLOCK
+    this.drawBlock = function(point, color)
+    {
+        this.ctx.fillStyle = color;
+        this.ctx.fillRect(point.x, point.y, game.BLOCKSIZE, game.BLOCKSIZE);
+    }
+
+    // ERASEBLOCK
+    this.eraseBlock = function(point)
+    {
+        this.ctx.clearRect(point.x, point.y, game.BLOCKSIZE, game.BLOCKSIZE);
+    }
+
+    // CLEARCANVAS
+    this.clearCanvas = function()
+    {
+        this.ctx.clearRect(0, 0, game.WIDTH, game.HEIGHT);
+    }
+
+    // SETSIZES
+    this.setSizes = function(w, h)
+    {
+        // Calculate appropriate size for one block and set canvas according to that
+        this.BLOCKSIZE  = (0.035 * Math.sqrt(w * h)).toFixed(0);
+        this.BLOCKSIZE  -= this.BLOCKSIZE % 2;
+        this.WIDTH      = w - (w % this.BLOCKSIZE);
+        this.HEIGHT     = h - (h % this.BLOCKSIZE);
+        this.ctx.canvas.width    = this.WIDTH;
+        this.ctx.canvas.height   = this.HEIGHT;
+        // Set other elements sizes
+        document.getElementById("controlsDiv").style.width = this.WIDTH + "px";
+        document.getElementById("gameDiv").style.width = this.WIDTH + "px";
+        // Send settings to iFrame
+        var msg = {
+            messageType: "SETTING",
+            options: {
+                "width": document.getElementById('gameDiv').offsetWidth *1.1,
+                "height": document.getElementById('gameDiv').offsetHeight *1.1
+            }
+        };
+        window.parent.postMessage(msg, "*");
+    }
+
+    // SETDIFFICULTY
+    this.setDifficulty = function()
+    {
+        // Read radios and find what is checked
+        var radios = document.getElementsByName("difficulty");
+        for (var i = 0; i < radios.length; i++)
+        {
+            if (radios[i].checked)
+            {
+                game.moveInterval = radios[i].value;
+                // Calculate score incremental according to difficulty (exponential)
+                this.scoreIncrement = 2 ** i;
+            }
+        }
+    }
+
+    // SETRADIOBUTTONS
+    this.setRadioButtons = function()
+    {
+        // Checks the correct radio button according to current difficulty
+        var radios = document.getElementsByName("difficulty");
+        for (var i = 0; i < radios.length; i++)
+        {
+            if (radios[i].value == game.moveInterval)
+            {
+                radios[i].checked = true;
+            }
+        }
+    }
+}
+
+
+// SNAKE "class"
+function Snake()
+{
+    this.snakeArr   = [];
+    this.direction  = 0;
+    this.color      = "green";
+    this.nextLocation = getRandomPoint();
+    this.snakeArr.push({x:this.nextLocation.x, y:this.nextLocation.y});
+
+
+    // DRAW
+    this.draw = function()
+    {
+        // Draw every block in the snake array
+        for (var i = 0; i < this.snakeArr.length; i++)
+        {
+            game.drawBlock(this.snakeArr[i], this.color);
+        }
+    }
+
+    // SETDIRECTION
+    this.setDirection = function()
+    {
+        // Set the next direction according to pressed key and previous direction
+        if (game.keyCode && game.readAllowed)
+        {
+            if (game.keyCode == 37 && this.direction != 2)
+            {
+                this.direction = 4;
+            }
+            else if (game.keyCode == 39 && this.direction != 4)
+            {
+                this.direction = 2;
+            }
+            else if (game.keyCode == 38 && this.direction != 1)
+            {
+                this.direction = 3;
+            }
+            else if (game.keyCode == 40 && this.direction != 3)
+            {
+                this.direction = 1;
+            }
+            // Decline reading keys until snake has moved
+            game.readAllowed = false;
+        }
+    }
+
+    // MOVE
+    this.move = function()
+    {
+        // Calculate the next head blocks place according to chosen direction
+        if (this.direction == 1)
+        {
+            this.nextLocation.y += game.BLOCKSIZE;
+            if (this.nextLocation.y > game.HEIGHT - game.BLOCKSIZE / 2)
+            {
+                this.nextLocation.y -= game.HEIGHT;
+            }
+        }
+        else if (this.direction == 2)
+        {
+            this.nextLocation.x += game.BLOCKSIZE;
+            if (this.nextLocation.x > game.WIDTH - game.BLOCKSIZE / 2)
+            {
+                this.nextLocation.x -= game.WIDTH;
+            }
+        }
+        else if (this.direction == 3)
+        {
+            this.nextLocation.y -= game.BLOCKSIZE;
+            if (this.nextLocation.y < - game.BLOCKSIZE / 2)
+            {
+                this.nextLocation.y += game.HEIGHT;
+            }
+        }
+        else if (this.direction == 4)
+        {
+            this.nextLocation.x -= game.BLOCKSIZE;
+            if (this.nextLocation.x < - game.BLOCKSIZE / 2)
+            {
+                this.nextLocation.x += game.WIDTH;
+            }
+        }
+
+        // If direction chosen
+        if (this.direction != 0)
+        {
+            // Check collision with body
+            if (this.collision(this.nextLocation))
+            {
+                stopGame();
+            }
+            else
+            {
+                // Add new block to the end of the array and draw it
+                this.snakeArr.push({x:this.nextLocation.x, y:this.nextLocation.y});
+                game.drawBlock(this.nextLocation, this.color);
+                // Check if snake eats an apple
+                if (Math.abs(this.nextLocation.x - game.food.location.x) < game.BLOCKSIZE / 2 && 
+                    Math.abs(this.nextLocation.y - game.food.location.y) < game.BLOCKSIZE / 2)
+                {
+                    game.score += game.scoreIncrement;
+                    game.updateScore();
+                    game.food.create();
+                }
+                else
+                {
+                    // Erase the snake tail block (first in the array)
+                    game.eraseBlock(this.snakeArr.shift());
+                }
+            }
+        }
+        // Allow reading the next direction
+        game.readAllowed = true;
+    }
+
+    // COLLISION
+    this.collision = function(point)
+    {
+        // Check if given point collides with snakes body
+        for (var i = 0; i < this.snakeArr.length; i++)
+        {
+            if (Math.abs(this.snakeArr[i].x - point.x) < game.BLOCKSIZE / 2 && 
+                Math.abs(this.snakeArr[i].y - point.y) < game.BLOCKSIZE / 2)
+                {
+                    return true;
+                }
+        }
+        return false;
+    }
+}
+
+
+// FOOD "class"
+function Food()
+{
+    this.location = getRandomPoint();
+    this.color = "red";
+
+
+    // CREATE
+    this.create = function()
+    {
+        // Get new random point for food until point is not in the snakes body
+        do
+        {
+            this.location = getRandomPoint();
+        }
+        while(game.snake.collision(this.location))
+        this.draw();
+    }
+
+    // DRAW
+    this.draw = function()
+    {
+        game.drawBlock(this.location, this.color);
+    }
+}
+
+
+// GETRANDOMPOINT
+// Returns a new random block location on the game canvas
+function getRandomPoint()
+{
+    var x_ = Math.floor((Math.random() * game.WIDTH - game.BLOCKSIZE) + 1);
+    x_ -= x_ % game.BLOCKSIZE;
+    var y_ = Math.floor((Math.random() * game.HEIGHT - game.BLOCKSIZE) + 1);
+    y_ -= y_ % game.BLOCKSIZE;
+    return {x:x_, y:y_};
+}
+
+
+// CATCHKEYPRESS
+// Check if key is allowed and do the according thing
+function catchKeyPress()
+{
+    if (game.playKeys.includes(game.keyCode))
+    {
+        if (game.gameRunning == false)
+        {
+            game.start();
+        }
+        // Solve and set the next direction
+        game.snake.setDirection();
+    }
+    else if (game.controlKeys.includes(game.keyCode))
+    {
+        if (game.keyCode == 78)
+        {
+            newGame();
+        }
+        else if (game.keyCode == 76)
+        {
+            loadGame();
+        }
+        else if (game.keyCode == 83)
+        {
+            saveGame();
+        }
+        else // game.keyCode == 80
+        {
+            pauseGame();
+        }
+    }
+    else if (game.difficultyKeys.includes(game.keyCode))
+    {
+        var radios = document.getElementsByName("difficulty");
+        if (game.keyCode == 49 || game.keyCode == 97)
+        {
+            radios[0].checked = true;
+        }
+        else if (game.keyCode == 50 || game.keyCode == 98)
+        {
+            radios[1].checked = true;
+        }
+        else if (game.keyCode == 51 || game.keyCode == 99)
+        {
+            radios[2].checked = true;
+        }
+        else // game.keyCode == 52 or 100
+        {
+            radios[3].checked = true;
+        }
+    }
+}
+
+
+</script>
+
+    </body>
+</html>
