@@ -178,12 +178,12 @@ function Game()
     {
         // Set game canvas size and calculate other dimensions
         this.setSizes(480, 480);
+        // Set chosen difficulty and score increment
         this.setDifficulty();
         // Init game variables
         this.snake          = new Snake();
         this.food           = new Food();
         this.score          = 0;
-        this.scoreIncrement = 0;
         // Event sniffers
         window.addEventListener("message", receiveMessage, false);
         window.addEventListener("keydown", (event) =>
@@ -211,8 +211,10 @@ function Game()
         this.food.location = foodLocation;
         this.moveInterval = difficulty;
         this.score = this.snake.snakeArr.length - 1;
-        // Set radios and draw things
+        // Set radio buttons and draw things
         this.setRadioButtons();
+        // Set chosen difficulty and score increment
+        this.setDifficulty();
         this.snake.draw();
         this.food.draw();
         this.updateScore();
@@ -292,22 +294,6 @@ function Game()
         window.parent.postMessage(msg, "*");
     }
 
-    // SETDIFFICULTY
-    this.setDifficulty = function()
-    {
-        // Read radios and find what is checked
-        var radios = document.getElementsByName("difficulty");
-        for (var i = 0; i < radios.length; i++)
-        {
-            if (radios[i].checked)
-            {
-                game.moveInterval = radios[i].value;
-                // Calculate score incremental according to difficulty (exponential)
-                this.scoreIncrement = 2 ** i;
-            }
-        }
-    }
-
     // SETRADIOBUTTONS
     this.setRadioButtons = function()
     {
@@ -318,6 +304,22 @@ function Game()
             if (radios[i].value == game.moveInterval)
             {
                 radios[i].checked = true;
+            }
+        }
+    }
+
+    // SETDIFFICULTY
+    this.setDifficulty = function()
+    {
+        // Read radios and find what is checked
+        var radios = document.getElementsByName("difficulty");
+        for (var i = 0; i < radios.length; i++)
+        {
+            if (radios[i].checked)
+            {
+                game.moveInterval = radios[i].value;
+                // Calculate score increment according to difficulty (exponential)
+                this.scoreIncrement = 2 ** i;
             }
         }
     }
