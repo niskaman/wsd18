@@ -32,19 +32,46 @@
                 margin: auto;
                 display: block;
             }
+            #scoreDiv
+            {
+                width: 32%;
+                display: inline-block;
+            }
+            #retroDiv
+            {
+                width: 32%;
+                display: inline-block;
+                text-align: left;
+            }
+            #emptyDiv
+            {
+                width: 32%;
+                display: inline-block;
+            }
         </style>
     </head>
     <body onload="newGame()">
         <div id="gameDiv">
             <canvas id="gameCanvas" tabindex=0></canvas>
             <div id="controlsDiv">
-                    SCORE: 
+                <div id="retroDiv">
+                    <input type="checkbox" id="retro" name="retro" onchange="retroMode()">
+                    <label for="retro">Retro [R]</label>
+                </div>
+                <div id="scoreDiv">
+                    SCORE :
                     <b><output id="score"></output></b>
+                </div>
+                <div id="emptyDiv"></div>
                     <p>
-                        <input type="radio" id="easy" name="difficulty" value="200"> Easy [1]
-                        <input type="radio" id="normal" name="difficulty" value="100" checked> Normal [2]
-                        <input type="radio" id="hard" name="difficulty" value="50"> Hard [3]
-                        <input type="radio" id="caffeine" name="difficulty" value="25"> Caffeine [4]
+                        <input type="radio" id="easy" name="difficulty" value="200">
+                        <label for="easy">Easy [1]</label>
+                        <input type="radio" id="normal" name="difficulty" value="100" checked>
+                        <label for="normal">Normal [2]</label>
+                        <input type="radio" id="hard" name="difficulty" value="50">
+                        <label for="hard">Hard [3]</label>
+                        <input type="radio" id="caffeine" name="difficulty" value="25">
+                        <label for="caffeine">Caffeine [4]</label>
                     </p>
                         <button onclick="newGame()">NEW [N]</button>
                         <button onclick="loadGame()">LOAD [L]</button>
@@ -70,7 +97,7 @@ var game = new Game();
 function newGame()
 {
     // Initialize and start new game
-    game.init();
+    game.new();
     game.load();
     game.start();
 }
@@ -85,7 +112,7 @@ function stopGame()
     };
     window.parent.postMessage(msg, "*");
     // Alert and stop
-    alert("GAME OVER!\nScore: " +game.score);
+    alert("GAME OVER!\nScore: " + game.score);
     game.stop();
 }
 
@@ -96,15 +123,16 @@ function saveGame()
         messageType: "SAVE",
         gameState: {
             gameSize: {
-                "width": game.WIDTH,
+                "width":  game.WIDTH,
                 "height": game.HEIGHT
             },
             snake: {
-                "array": game.snake.snakeArr,
+                "array":     game.snake.snakeArr,
                 "direction": game.snake.direction
             },
-            food: game.food.location,
-            difficulty: game.moveInterval
+            score:        game.score,
+            foodLocation: game.food.location,
+            moveInterval: game.moveInterval
         }
     };
     window.parent.postMessage(msg, "*");
@@ -126,17 +154,36 @@ function pauseGame()
 }
 
 
+function retroMode()
+{
+    if (game.retroMode)
+    {
+        game.retroMode = false;
+    }
+    else
+    {
+        game.retroMode = true;
+    }
+    document.getElementById("retro").checked = game.retroMode;
+    game.rePaint();
+}
+
+
 function receiveMessage(e)
 {
     var msg = e.data;
 
     if (msg.messageType === "LOAD")
     {
-        game.stop();
-        game.load(msg.gameState.gameSize,
-                  msg.gameState.snake,
-                  msg.gameState.food,
-                  msg.gameState.difficulty)
+        // Set variables
+        game.WIDTH = msg.gameState.gameSize.width;
+        game.HEIGHT = msg.gameState.gameSize.height;
+        game.snake = new Snake(msg.gameState.snake.array, msg.gameState.snake.direction);
+        game.score = msg.gameState.score;
+        game.food = new Food(msg.gameState.foodLocation);
+        game.moveInterval = msg.gameState.moveInterval;
+        // Load
+        game.load();
     }
     else if (msg.messageType === "ERROR")
     {
@@ -145,7 +192,7 @@ function receiveMessage(e)
 }
 
 
-// Updates game movoment, this case only snake
+// Updates game
 function update()
 {
     game.snake.move();
@@ -155,71 +202,55 @@ function update()
 // GAME "class"
 function Game()
 {
+    // Game visual parameters
     this.canvas         = document.getElementById("gameCanvas");
     this.ctx            = document.getElementById("gameCanvas").getContext("2d");
+    this.WIDTH          = 480;
+    this.HEIGHT         = 480;
     this.BLOCKSIZE      = 0;
-    this.WIDTH          = 0;
-    this.HEIGHT         = 0;
-
+    this.EDGE           = 0;
+    this.retroMode      = false;
+    // Game variables
     this.snake          = null;
     this.food           = null;
     this.score          = 0;
     this.scoreIncrement = 0;
     this.moveInterval   = 0;
-
     this.gameRunning    = false;
+    // Allowed keys
     this.playKeys       = [37,38,39,40];
-    this.controlKeys    = [80,78,76,83];
+    this.controlKeys    = [80,78,76,83,82];
     this.difficultyKeys = [49,97,50,98,51,99,52,100];
-
-
-    // INITIALIZE
-    this.init = function()
-    {
-        // Set game canvas size and calculate other dimensions
-        this.setSizes(480, 480);
-        // Set chosen difficulty and score increment
-        this.setDifficulty();
-        // Init game variables
-        this.snake          = new Snake();
-        this.food           = new Food();
-        this.score          = 0;
-        // Event sniffers
-        window.addEventListener("message", receiveMessage, false);
+    // Event sniffers
+    window.addEventListener("message", receiveMessage, false);
         window.addEventListener("keydown", (event) =>
         {
             event.preventDefault();
             this.keyCode = event.keyCode;
             catchKeyPress();
         });
+
+
+    // NEW
+    this.new = function()
+    {
+        this.stop();
+        this.setGraphics();
+        // Initialize game variables
+        this.snake  = new Snake();
+        this.food   = new Food();
+        this.score  = 0;
+        this.setMoveIntervalAndScoreIncrement();
     }
 
     // LOAD
-    this.load = function(gameSize={width:this.WIDTH,height:this.HEIGHT}, 
-                         snake={array:this.snake.snakeArr,direction:this.snake.direction}, 
-                         foodLocation=this.food.location, 
-                         difficulty=this.moveInterval)
+    this.load = function()
     {
-        // Clear possible previous and set loaded size
-        this.clearCanvas();
-        this.setSizes(gameSize.width, gameSize.height);
-        // Load either saved or new games parameters
-        this.snake.snakeArr = snake.array;
-        this.snake.direction = snake.direction;
-        this.snake.nextLocation.x = this.snake.snakeArr[this.snake.snakeArr.length - 1].x
-        this.snake.nextLocation.y = this.snake.snakeArr[this.snake.snakeArr.length - 1].y
-        this.food.location = foodLocation;
-        this.moveInterval = difficulty;
-        this.score = this.snake.snakeArr.length - 1;
-        // Set radio buttons and draw things
+        this.stop();
+        this.setGraphics();
         this.setRadioButtons();
-        // Set chosen difficulty and score increment
-        this.setDifficulty();
-        this.snake.draw();
-        this.food.draw();
-        this.updateScore();
-        // Set game state
-        this.gameRunning = false;
+        this.setMoveIntervalAndScoreIncrement();
+        this.rePaint();
     }
 
     // START
@@ -248,36 +279,50 @@ function Game()
     // UPDATESCORE
     this.updateScore = function()
     {
-        document.getElementById("score").innerHTML = game.score;
+        document.getElementById("score").innerHTML = this.score;
     }
 
     // DRAWBLOCK
+    var edge;
     this.drawBlock = function(point, color)
     {
+        edge = this.retroMode ? this.EDGE : 0;
         this.ctx.fillStyle = color;
-        this.ctx.fillRect(point.x, point.y, game.BLOCKSIZE, game.BLOCKSIZE);
+        this.ctx.fillRect(point.x, point.y, this.BLOCKSIZE - edge, 
+                                            this.BLOCKSIZE - edge);
     }
 
     // ERASEBLOCK
     this.eraseBlock = function(point)
     {
-        this.ctx.clearRect(point.x, point.y, game.BLOCKSIZE, game.BLOCKSIZE);
+        this.ctx.clearRect(point.x, point.y, this.BLOCKSIZE, this.BLOCKSIZE);
     }
 
     // CLEARCANVAS
     this.clearCanvas = function()
     {
-        this.ctx.clearRect(0, 0, game.WIDTH, game.HEIGHT);
+        this.ctx.clearRect(0, 0, this.WIDTH, this.HEIGHT);
     }
 
-    // SETSIZES
-    this.setSizes = function(w, h)
+    // REPAINT
+    this.rePaint = function()
     {
+        this.clearCanvas();
+        this.snake.draw();
+        this.food.draw();
+        this.updateScore();
+    }
+
+    // SETGRAPHICS
+    this.setGraphics = function()
+    {
+        this.clearCanvas();
         // Calculate appropriate size for one block and set canvas according to that
-        this.BLOCKSIZE  = (0.035 * Math.sqrt(w * h)).toFixed(0);
-        this.BLOCKSIZE  -= this.BLOCKSIZE % 2;
-        this.WIDTH      = w - (w % this.BLOCKSIZE);
-        this.HEIGHT     = h - (h % this.BLOCKSIZE);
+        this.BLOCKSIZE  = (0.035 * Math.sqrt(this.WIDTH * this.HEIGHT)).toFixed(0);
+        this.BLOCKSIZE -= this.BLOCKSIZE % 2;
+        this.WIDTH     -= this.WIDTH % this.BLOCKSIZE;
+        this.HEIGHT    -= this.HEIGHT % this.BLOCKSIZE;
+        this.EDGE       = (this.BLOCKSIZE * 0.1).toFixed(0);
         this.ctx.canvas.width    = this.WIDTH;
         this.ctx.canvas.height   = this.HEIGHT;
         // Set other elements sizes
@@ -301,15 +346,15 @@ function Game()
         var radios = document.getElementsByName("difficulty");
         for (var i = 0; i < radios.length; i++)
         {
-            if (radios[i].value == game.moveInterval)
+            if (radios[i].value == this.moveInterval)
             {
                 radios[i].checked = true;
             }
         }
     }
 
-    // SETDIFFICULTY
-    this.setDifficulty = function()
+    // setMoveIntervalAndScoreIncrement
+    this.setMoveIntervalAndScoreIncrement = function()
     {
         // Read radios and find what is checked
         var radios = document.getElementsByName("difficulty");
@@ -317,7 +362,7 @@ function Game()
         {
             if (radios[i].checked)
             {
-                game.moveInterval = radios[i].value;
+                this.moveInterval = Number(radios[i].value);
                 // Calculate score increment according to difficulty (exponential)
                 this.scoreIncrement = 2 ** i;
             }
@@ -327,12 +372,14 @@ function Game()
 
 
 // SNAKE "class"
-function Snake()
+function Snake(array, direction)
 {
-    this.snakeArr   = [];
-    this.direction  = 0;
+    this.snakeArr   = typeof array !== 'undefined' ? array : [];
+    this.direction  = typeof direction !== 'undefined' ? direction : 0;
+    this.nextLocation = typeof array !== 'undefined' ? {x:array[array.length - 1].x,
+                                                        y:array[array.length - 1].y} : getRandomPoint();
     this.color      = "green";
-    this.nextLocation = getRandomPoint();
+
     this.snakeArr.push({x:this.nextLocation.x, y:this.nextLocation.y});
 
 
@@ -460,9 +507,9 @@ function Snake()
 
 
 // FOOD "class"
-function Food()
+function Food(location)
 {
-    this.location = getRandomPoint();
+    this.location = typeof location !== 'undefined' ? location : getRandomPoint();
     this.color = "red";
 
 
@@ -525,9 +572,13 @@ function catchKeyPress()
         {
             saveGame();
         }
-        else // game.keyCode == 80
+        else if (game.keyCode == 80)
         {
             pauseGame();
+        }
+        else // game.keyCode == 82
+        {
+            retroMode();
         }
     }
     else if (game.difficultyKeys.includes(game.keyCode))
