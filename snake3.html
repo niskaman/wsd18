@@ -64,13 +64,13 @@
                 </div>
                 <div id="emptyDiv"></div>
                     <p>
-                        <input type="radio" id="easy" name="difficulty" value="200">
-                        <label for="easy">Easy [1]</label>
-                        <input type="radio" id="normal" name="difficulty" value="100" checked>
+                        <input type="radio" id="easy" name="difficulty" onclick="setSpeed(0)">
+                        <label for="easy">Slow [1]</label>
+                        <input type="radio" id="normal" name="difficulty" onclick="setSpeed(1)" checked>
                         <label for="normal">Normal [2]</label>
-                        <input type="radio" id="hard" name="difficulty" value="50">
-                        <label for="hard">Hard [3]</label>
-                        <input type="radio" id="caffeine" name="difficulty" value="25">
+                        <input type="radio" id="hard" name="difficulty" onclick="setSpeed(2)">
+                        <label for="hard">Fast [3]</label>
+                        <input type="radio" id="caffeine" name="difficulty" onclick="setSpeed(3)">
                         <label for="caffeine">Caffeine [4]</label>
                     </p>
                         <button onclick="newGame()">NEW [N]</button>
@@ -80,7 +80,7 @@
                     <p>
                         Use the arrow keys on you keyboard to start moving and to steer the snake. 
                         It is also possible to use keyboard for other game options and buttons. 
-                        Increased difficulty produces more points for shorter snake.
+                        Increased speed produces more points for shorter snake.
                         <!-- It is also possible 
                         to use mouse clicks or touch screen. -->
                     </p>
@@ -98,12 +98,10 @@ function newGame()
 {
     // Initialize and start new game
     game.new();
-    game.load();
-    game.start();
 }
 
 
-function stopGame()
+function endGame()
 {
     // Send SCORE
     var msg = {
@@ -132,7 +130,7 @@ function saveGame()
             },
             score:        game.score,
             foodLocation: game.food.location,
-            moveInterval: game.moveInterval
+            intervalIndex: game.intervalIndex
         }
     };
     window.parent.postMessage(msg, "*");
@@ -156,6 +154,7 @@ function pauseGame()
 
 function retroMode()
 {
+    // Toggle retro mode
     if (game.retroMode)
     {
         game.retroMode = false;
@@ -169,21 +168,43 @@ function retroMode()
 }
 
 
+function setSpeed(index)
+{
+    // Stop game
+    game.stop();
+    // Get radio buttons
+    var radios = document.getElementsByName("difficulty");
+    if (typeof index !== 'undefined')
+    {
+        radios[index].checked = true;
+        // Set interval index
+        game.intervalIndex = index;
+        // Calculate score increment according to difficulty (exponential)
+        game.scoreIncrement = 2 ** index;
+    }
+    else // No index given, find checked radio and set variables
+    {
+        for (var i = 0; i < radios.length; i++)
+        {
+            if (radios[i].checked)
+            {
+                // Set interval index
+                game.intervalIndex = i;
+                // Calculate score increment according to difficulty (exponential)
+                game.scoreIncrement = 2 ** i;
+            }
+        }
+    }
+}
+
+
 function receiveMessage(e)
 {
     var msg = e.data;
 
     if (msg.messageType === "LOAD")
     {
-        // Set variables
-        game.WIDTH = msg.gameState.gameSize.width;
-        game.HEIGHT = msg.gameState.gameSize.height;
-        game.snake = new Snake(msg.gameState.snake.array, msg.gameState.snake.direction);
-        game.score = msg.gameState.score;
-        game.food = new Food(msg.gameState.foodLocation);
-        game.moveInterval = msg.gameState.moveInterval;
-        // Load
-        game.load();
+        game.load(msg);
     }
     else if (msg.messageType === "ERROR")
     {
@@ -205,8 +226,8 @@ function Game()
     // Game visual parameters
     this.canvas         = document.getElementById("gameCanvas");
     this.ctx            = document.getElementById("gameCanvas").getContext("2d");
-    this.WIDTH          = 480;
-    this.HEIGHT         = 480;
+    this.WIDTH          = 0;
+    this.HEIGHT         = 0;
     this.BLOCKSIZE      = 0;
     this.EDGE           = 0;
     this.retroMode      = false;
@@ -215,12 +236,15 @@ function Game()
     this.food           = null;
     this.score          = 0;
     this.scoreIncrement = 0;
-    this.moveInterval   = 0;
+    this.intervalIndex  = 0;
     this.gameRunning    = false;
     // Allowed keys
     this.playKeys       = [37,38,39,40];
     this.controlKeys    = [80,78,76,83,82];
-    this.difficultyKeys = [49,97,50,98,51,99,52,100];
+    this.speedKeys = [49,97,50,98,51,99,52,100];
+    this.readAllowed    = true;
+    // Move intervals for different speeds
+    this.INTERVALS = [200,100,50,25];
     // Event sniffers
     window.addEventListener("message", receiveMessage, false);
         window.addEventListener("keydown", (event) =>
@@ -234,23 +258,43 @@ function Game()
     // NEW
     this.new = function()
     {
+        // Stop possible active game
         this.stop();
+        // Set initial graphics
+        this.WIDTH          = 480;
+        this.HEIGHT         = 480;
         this.setGraphics();
         // Initialize game variables
         this.snake  = new Snake();
         this.food   = new Food();
         this.score  = 0;
-        this.setMoveIntervalAndScoreIncrement();
+        // Set game speed according to the radio buttons
+        setSpeed();
+        // Paint canvas
+        this.rePaint();
+        // Allow start with arrow keys
+        this.readAllowed = true;
     }
 
     // LOAD
-    this.load = function()
+    this.load = function(msg)
     {
+        // Stop possible active game
         this.stop();
+        // Set possibly saved graphics
+        this.WIDTH = msg.gameState.gameSize.width;
+        this.HEIGHT = msg.gameState.gameSize.height;
         this.setGraphics();
-        this.setRadioButtons();
-        this.setMoveIntervalAndScoreIncrement();
+        // Set game variables
+        this.snake = new Snake(msg.gameState.snake.array, msg.gameState.snake.direction);
+        this.score = msg.gameState.score;
+        this.food = new Food(msg.gameState.foodLocation);
+        // Set game speed according to the saved value
+        setSpeed(msg.gameState.intervalIndex);
+        // Paint canvas
         this.rePaint();
+        // Allow start with arrow keys
+        this.readAllowed = true;
     }
 
     // START
@@ -261,7 +305,8 @@ function Game()
         {
             clearInterval(this.interval);
         }
-        this.interval = setInterval(update, this.moveInterval);
+        var index = this.intervalIndex;
+        this.interval = setInterval(update, this.INTERVALS[index]);
         this.gameRunning = true;
     }
 
@@ -283,10 +328,9 @@ function Game()
     }
 
     // DRAWBLOCK
-    var edge;
     this.drawBlock = function(point, color)
     {
-        edge = this.retroMode ? this.EDGE : 0;
+        var edge = this.retroMode ? this.EDGE : 0;
         this.ctx.fillStyle = color;
         this.ctx.fillRect(point.x, point.y, this.BLOCKSIZE - edge, 
                                             this.BLOCKSIZE - edge);
@@ -337,36 +381,6 @@ function Game()
             }
         };
         window.parent.postMessage(msg, "*");
-    }
-
-    // SETRADIOBUTTONS
-    this.setRadioButtons = function()
-    {
-        // Checks the correct radio button according to current difficulty
-        var radios = document.getElementsByName("difficulty");
-        for (var i = 0; i < radios.length; i++)
-        {
-            if (radios[i].value == this.moveInterval)
-            {
-                radios[i].checked = true;
-            }
-        }
-    }
-
-    // setMoveIntervalAndScoreIncrement
-    this.setMoveIntervalAndScoreIncrement = function()
-    {
-        // Read radios and find what is checked
-        var radios = document.getElementsByName("difficulty");
-        for (var i = 0; i < radios.length; i++)
-        {
-            if (radios[i].checked)
-            {
-                this.moveInterval = Number(radios[i].value);
-                // Calculate score increment according to difficulty (exponential)
-                this.scoreIncrement = 2 ** i;
-            }
-        }
     }
 }
 
@@ -463,7 +477,7 @@ function Snake(array, direction)
             // Check collision with body
             if (this.collision(this.nextLocation))
             {
-                stopGame();
+                endGame();
             }
             else
             {
@@ -549,7 +563,7 @@ function getRandomPoint()
 // Check if key is allowed and do the according thing
 function catchKeyPress()
 {
-    if (game.playKeys.includes(game.keyCode))
+    if (game.playKeys.includes(game.keyCode) && game.readAllowed)
     {
         if (game.gameRunning == false)
         {
@@ -581,24 +595,24 @@ function catchKeyPress()
             retroMode();
         }
     }
-    else if (game.difficultyKeys.includes(game.keyCode))
+    else if (game.speedKeys.includes(game.keyCode))
     {
         var radios = document.getElementsByName("difficulty");
         if (game.keyCode == 49 || game.keyCode == 97)
         {
-            radios[0].checked = true;
+            setSpeed(0);
         }
         else if (game.keyCode == 50 || game.keyCode == 98)
         {
-            radios[1].checked = true;
+            setSpeed(1);
         }
         else if (game.keyCode == 51 || game.keyCode == 99)
         {
-            radios[2].checked = true;
+            setSpeed(2);
         }
         else // game.keyCode == 52 or 100
         {
-            radios[3].checked = true;
+            setSpeed(3);
         }
     }
 }
