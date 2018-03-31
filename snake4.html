@@ -78,11 +78,13 @@
                         <button onclick="saveGame()">SAVE [S]</button>
                         <button onclick="pauseGame()">PAUSE [P]</button>
                     <p>
-                        Use the arrow keys on you keyboard to start moving and to steer the snake. 
+                        <b>
+                        Use the arrow keys on you keyboard / mouse click / touch to start 
+                        moving and to steer the snake.
+                        </b> 
                         It is also possible to use keyboard for other game options and buttons. 
-                        Increased speed produces more points for shorter snake.
-                        <!-- It is also possible 
-                        to use mouse clicks or touch screen. -->
+                        Changing speed mid game is possible and it pauses the game. 
+                        Increased speed produces more points for shorter snake. Good luck!
                     </p>
             </div>
         </div>
@@ -241,18 +243,37 @@ function Game()
     // Allowed keys
     this.playKeys       = [37,38,39,40];
     this.controlKeys    = [80,78,76,83,82];
-    this.speedKeys = [49,97,50,98,51,99,52,100];
+    this.speedKeys      = [49,97,50,98,51,99,52,100];
     this.readAllowed    = true;
+    this.keyCode        = false;
+    this.click          = {x:0, y:0};
     // Move intervals for different speeds
     this.INTERVALS = [200,100,50,25];
     // Event sniffers
     window.addEventListener("message", receiveMessage, false);
-        window.addEventListener("keydown", (event) =>
-        {
-            event.preventDefault();
-            this.keyCode = event.keyCode;
-            catchKeyPress();
-        });
+    window.addEventListener("keydown", (event) =>
+    {
+        event.preventDefault();
+        this.keyCode = event.keyCode;
+        catchKeyPress();
+        this.keyCode = false;
+    });
+    this.canvas.addEventListener('mousedown', (event) => 
+    {
+        this.click.x = event.clientX;
+        this.click.y = event.clientY;
+        catchClick();
+        this.click.x = false;
+        this.click.y = false;
+    })
+    this.canvas.addEventListener('touchstart', (event) => 
+    {
+        this.click.x = event.clientX;
+        this.click.y = event.clientY;
+        catchClick();
+        this.click.x = false;
+        this.click.y = false;
+    })
 
 
     // NEW
@@ -429,7 +450,54 @@ function Snake(array, direction)
             {
                 this.direction = 1;
             }
-            // Decline reading keys until snake has moved
+            // Decline reading direction until snake has moved
+            game.readAllowed = false;
+        }
+        else if (game.click && game.readAllowed)
+        {
+            var head = this.snakeArr.length - 1;
+            if (game.gameRunning)
+            {
+                if (game.click.x < this.snakeArr[head].x && this.direction != 2
+                        && (this.direction == 3 || this.direction == 1))
+                {
+                    this.direction = 4;
+                }
+                else if (game.click.x > this.snakeArr[head].x && this.direction != 4
+                        && (this.direction == 3 || this.direction == 1))
+                {
+                    this.direction = 2;
+                }
+                else if (game.click.y > this.snakeArr[head].y && this.direction != 1
+                        && (this.direction == 4 || this.direction == 2))
+                {
+                    this.direction = 1;
+                }
+                else if (game.click.y < this.snakeArr[head].y && this.direction != 3
+                        && (this.direction == 4 || this.direction == 2))
+                {
+                    this.direction = 3;
+                }
+            }
+            else // Not direction set, calculate
+            {
+                if (Math.abs(game.click.x - this.snakeArr[head].x) 
+                    > Math.abs(game.click.y - this.snakeArr[head].y))
+                {
+                    if (game.click.x < this.snakeArr[head].x)
+                        this.direction = 4;
+                    else
+                        this.direction = 2;
+                }
+                else
+                {
+                    if (game.click.y > this.snakeArr[head].y)
+                        this.direction = 1;
+                    else
+                        this.direction = 3;
+                }
+            }
+            // Decline reading direction until snake has moved
             game.readAllowed = false;
         }
     }
@@ -565,12 +633,13 @@ function catchKeyPress()
 {
     if (game.playKeys.includes(game.keyCode) && game.readAllowed)
     {
+        // Solve and set the next direction
+        game.snake.setDirection();
+        // Star game on key
         if (game.gameRunning == false)
         {
             game.start();
         }
-        // Solve and set the next direction
-        game.snake.setDirection();
     }
     else if (game.controlKeys.includes(game.keyCode))
     {
@@ -613,6 +682,22 @@ function catchKeyPress()
         else // game.keyCode == 52 or 100
         {
             setSpeed(3);
+        }
+    }
+}
+
+
+// CATCHCLICK
+function catchClick()
+{
+    if (game.click)
+    {
+        // Solve and set the next direction
+        game.snake.setDirection();
+        // Start on click
+        if (game.gameRunning == false)
+        {
+            game.start();
         }
     }
 }
