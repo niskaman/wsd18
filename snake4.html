@@ -224,35 +224,26 @@ function Game()
     window.addEventListener("message", receiveMessage, false);
     window.addEventListener("keydown", (event) =>
     {
-        if (this.inputAllowed)
-        {
-            event.preventDefault();
-            this.keyCode = event.keyCode;
-            catchKeyPress();
-            this.keyCode = false;
-        }
+        event.preventDefault();
+        this.keyCode = event.keyCode;
+        catchKeyPress();
+        this.keyCode = false;
     });
     this.canvas.addEventListener('mousedown', (event) => 
     {
-        if (this.inputAllowed)
-        {
-            this.click.x = event.clientX;
-            this.click.y = event.clientY;
-            catchClick();
-            this.click.x = false;
-            this.click.y = false;
-        }
+        this.click.x = event.clientX;
+        this.click.y = event.clientY;
+        catchClick();
+        this.click.x = false;
+        this.click.y = false;
     })
     this.canvas.addEventListener('touchstart', (event) => 
     {
-        if (this.inputAllowed)
-        {
-            this.click.x = event.clientX;
-            this.click.y = event.clientY;
-            catchClick();
-            this.click.x = false;
-            this.click.y = false;
-        }
+        this.click.x = event.clientX;
+        this.click.y = event.clientY;
+        catchClick();
+        this.click.x = false;
+        this.click.y = false;
     })
 
 
@@ -329,6 +320,7 @@ function Game()
         this.running = false;
     }
 
+    // END
     this.end = function()
     {
         // Send SCORE
@@ -687,7 +679,7 @@ function getRandomPoint()
 // Check if key is allowed and do the according thing
 function catchKeyPress()
 {
-    if (game.playKeys.includes(game.keyCode)/*  && game.inputAllowed */)
+    if (game.playKeys.includes(game.keyCode) && game.inputAllowed)
     {
         // Solve and set the next direction
         game.snake.setDirection();
@@ -745,12 +737,15 @@ function catchKeyPress()
 // CATCHCLICK
 function catchClick()
 {
-    // Solve and set the next direction
-    game.snake.setDirection();
-    // Start on click
-    if (game.running == false && game.ended == false)
+    if (this.inputAllowed)
     {
-        game.start();
+        // Solve and set the next direction
+        game.snake.setDirection();
+        // Start on click
+        if (game.running == false && game.ended == false)
+        {
+            game.start();
+        }
     }
 }
 
