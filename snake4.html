@@ -293,14 +293,15 @@ function Game()
         this.snake = new Snake(msg.gameState.snake.array, msg.gameState.snake.direction);
         this.score = msg.gameState.score;
         this.food = new Food(msg.gameState.foodLocation);
-        // Set game speed according to the saved value
+        // Set radios and game speed according to the saved value
+        this.radioButtonsEnabled = true; // For manual set
         this.setSpeed(msg.gameState.intervalIndex);
+        this.enableRadioButtons(false);
         // Paint canvas
         this.rePaint();
         // Allow start with arrow keys
         this.inputAllowed = true;
         this.ended = false;
-        this.enableRadioButtons(true);
     }
 
     // START
