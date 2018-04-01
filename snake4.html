@@ -76,7 +76,7 @@
                         <input type="radio" id="hard" name="difficulty" onclick="setSpeed(2)">
                         <label for="hard">Fast [3]</label>
                         <input type="radio" id="caffeine" name="difficulty" onclick="setSpeed(3)">
-                        <label for="caffeine">Caffeine [4]</label>
+                        <label for="caffeine">Hasty [4]</label>
                     </p>
                         <button onclick="newGame()">NEW [N]</button>
                         <button onclick="loadGame()">LOAD [L]</button>
@@ -462,8 +462,11 @@ function Snake(array, direction)
     this.nextLocation = typeof array !== 'undefined' ? {x:array[array.length - 1].x,
                                                         y:array[array.length - 1].y} : getRandomPoint();
     this.color      = "green";
-
-    this.body.push({x:this.nextLocation.x, y:this.nextLocation.y});
+    // If whole new snake
+    if (this.body.length == 0)
+    {
+        this.body.push({x:this.nextLocation.x, y:this.nextLocation.y});
+    }
 
 
     // DRAW
